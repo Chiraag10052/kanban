@@ -1,131 +1,164 @@
-import React, { useState, useEffect } from 'react';
-import './App.css';
+import React, { useState, useEffect } from "react";
+import "./App.css";
+const priorityMap = {
+  4: { name: "Urgent", color: "#CF3A3A" },
+  3: { name: "High", color: "#F39C12" },
+  2: { name: "Medium", color: "#F5C300" },
+  1: { name: "Low", color: "#4CAF50" },
+  0: { name: "No priority", color: "#90A4AE" },
+};
 
-// Import images
-// import threeDotMenu from '/assets/menu.svg';
-// import addIcon from './assets/add.svg';
-// import backlogIcon from './assets/Backlog.svg';
-// import cancelledIcon from './assets/Cancelled.svg';
-// import displayIcon from './assets/Display.svg';
-// import doneIcon from './assets/Done.svg';
-// import downIcon from './assets/Down.svg';
-// import highPriorityIcon from './assets/Img - High Priority.svg';
-// import lowPriorityIcon from './assets/Img - Low Priority.svg';
-// import mediumPriorityIcon from './assets/Img - Medium Priority.svg';
-// import inProgressIcon from './assets/in-progress.svg';
-// import noPriorityIcon from './assets/No-priority.svg';
-// import urgentPriorityColorIcon from './assets/UrgentPriorityColour.svg';
-// import urgentPriorityGreyIcon from './assets/UrgentPriorityGrey.svg';
-// import todoIcon from './assets/ToDo.svg';
-
-const API_ENDPOINT = 'https://api.quicksell.co/v1/internal/frontend-assignment';
-
-function App() {
+const App = () => {
   const [tickets, setTickets] = useState([]);
   const [users, setUsers] = useState([]);
-  const [grouping, setGrouping] = useState('status');
-  const [ordering, setOrdering] = useState('priority');
+  const [displayOptions, setDisplayOptions] = useState({
+    grouping: "status",
+    ordering: "priority",
+  });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    fetch("https://api.quicksell.co/v1/internal/frontend-assignment")
+      .then((response) => response.json())
+      .then((data) => {
+        setTickets(data.tickets);
+        setUsers(data.users);
+      });
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const response = await fetch(API_ENDPOINT);
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-      const data = await response.json();
-      setTickets(data.tickets);
-      setUsers(data.users);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    }
-  };
-
-  const handleGroupingChange = (value) => {
-    setGrouping(value);
-    setIsDropdownOpen(false);
-  };
-
-  const handleOrderingChange = (value) => {
-    setOrdering(value);
-    setIsDropdownOpen(false);
-  };
-
   const groupTickets = () => {
-    if (grouping === 'status') {
-      return tickets.reduce((acc, ticket) => {
-        (acc[ticket.status] = acc[ticket.status] || []).push(ticket);
-        return acc;
-      }, {});
-    } else if (grouping === 'user') {
-      return tickets.reduce((acc, ticket) => {
-        const user = users.find(u => u.id === ticket.userId);
-        (acc[user.name] = acc[user.name] || []).push(ticket);
-        return acc;
-      }, {});
-    }
-  };
-
-  const sortTickets = (ticketGroup) => {
-    return Object.keys(ticketGroup).reduce((acc, key) => {
-      acc[key] = ticketGroup[key].sort((a, b) => b.priority - a.priority);
+    return tickets.reduce((acc, ticket) => {
+      let key;
+      switch (displayOptions.grouping) {
+        case "user":
+          key =
+            users.find((user) => user.id === ticket.userId)?.name ||
+            "Unassigned";
+          break;
+        case "priority":
+          key = priorityMap[ticket.priority].name;
+          break;
+        default:
+          key = ticket.status;
+      }
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push(ticket);
       return acc;
     }, {});
   };
 
-  const groupedAndSortedTickets = sortTickets(groupTickets());
+  const sortTickets = (ticketsToSort) => {
+    return ticketsToSort.sort((a, b) => {
+      if (displayOptions.ordering === "priority") {
+        return b.priority - a.priority;
+      }
+      return a.title.localeCompare(b.title);
+    });
+  };
 
-  return (
-    <div className="app">
-      <h1>Kanban Board</h1>
-      <div className="dropdown-container">
-        <button className="dropdown-button" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
-          Display Options
-        </button>
-        {isDropdownOpen && (
-          <div className="dropdown-menu">
-            <div className="dropdown-item">
-              <span>Grouping:</span>
-              <select value={grouping} onChange={(e) => handleGroupingChange(e.target.value)}>
-                <option value="status">Status</option>
-                <option value="user">User</option>
-              </select>
-            </div>
-            <div className="dropdown-item">
-              <span>Ordering:</span>
-              <select value={ordering} onChange={(e) => handleOrderingChange(e.target.value)}>
-                <option value="priority">Priority</option>
-              </select>
-            </div>
-          </div>
-        )}
+  const groupedAndSortedTickets = Object.entries(groupTickets()).reduce(
+    (acc, [key, value]) => {
+      acc[key] = sortTickets(value);
+      return acc;
+    },
+    {}
+  );
+
+  const renderCard = (ticket) => {
+    const assignedUser = users.find((user) => user.id === ticket.userId);
+    return (
+      <div className="card">
+        <div className="card-header">
+          <span className="ticket-id">{ticket.id}</span>
+          <div className="user-avatar">{assignedUser?.name[0]}</div>
+        </div>
+        <h3 className="card-title">{ticket.title}</h3>
+        <div className="card-footer">
+          <span
+            className="priority-indicator"
+            style={{ backgroundColor: priorityMap[ticket.priority].color }}
+          ></span>
+          <span className="tag">{ticket.tag[0]}</span>
+        </div>
       </div>
-      <div className="board">
-        {Object.entries(groupedAndSortedTickets).map(([group, tickets]) => (
-          <div key={group} className="column">
-            <h2>{group}</h2>
-            {tickets.map(ticket => (
-              <div key={ticket.id} className="card">
-                <div className="card-header">
-                  <span>{ticket.id}</span>
-                  <span>{users.find(u => u.id === ticket.userId)?.name}</span>
-                </div>
-                <h3>{ticket.title}</h3>
-                <div className="card-footer">
-                  <span className="priority">Priority: {ticket.priority}</span>
-                  <span className="tag">{ticket.tag[0]}</span>
-                </div>
-              </div>
-            ))}
+    );
+  };
+
+  const handleOptionChange = (option, value) => {
+    setDisplayOptions((prev) => ({ ...prev, [option]: value }));
+    setIsDropdownOpen(false);
+  };
+
+  const DisplayDropdown = () => (
+    <div className={`dropdown ${isDropdownOpen ? "open" : ""}`}>
+      <button
+        className="dropdown-toggle"
+        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+      >
+        <span>Display</span>
+        <svg className="icon" viewBox="0 0 24 24">
+          <path d="M7 10l5 5 5-5H7z" />
+        </svg>
+      </button>
+      {isDropdownOpen && (
+        <div className="dropdown-menu">
+          <div className="dropdown-section">
+            <h4>Grouping</h4>
+            <select
+              value={displayOptions.grouping}
+              onChange={(e) => handleOptionChange("grouping", e.target.value)}
+            >
+              <option value="status">Status</option>
+              <option value="user">User</option>
+              <option value="priority">Priority</option>
+            </select>
           </div>
-        ))}
-      </div>
+          <div className="dropdown-section">
+            <h4>Ordering</h4>
+            <select
+              value={displayOptions.ordering}
+              onChange={(e) => handleOptionChange("ordering", e.target.value)}
+            >
+              <option value="priority">Priority</option>
+              <option value="title">Title</option>
+            </select>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+
+  return (
+    <>
+      <div className="board-header">
+        <DisplayDropdown />
+      </div>
+      <div className="kanban-board">
+      <div className="board-columns">
+        {Object.entries(groupedAndSortedTickets).map(
+          ([group, groupTickets]) => (
+            <div key={group} className="board-column">
+              <div className="column-header">
+                <h2>{group}</h2>
+                <div className="column-actions">
+                  <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                  </svg>
+                  <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                  </svg>
+                </div>
+              </div>
+              {groupTickets.map((ticket) => renderCard(ticket))}
+            </div>
+          )
+        )}
+      </div>
+    </div>
+    </>
+  );
+};
 
 export default App;
